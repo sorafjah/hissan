@@ -729,11 +729,15 @@
             let size = base;
             area.style.setProperty('--print-font-size', size + 'pt');
 
-            // 画面表示ではmin-heightが297mmなので、中身が多いときだけscrollHeightがそれを超えます
-            while (area.scrollHeight > PAGE_HEIGHT_PX + 1 && size > 6) {
+            // 画面表示では用紙にmin-height(297mm)があるため、そのままだと中身の量を測れません。
+            // 測るあいだだけ高さの下限を外し、中身そのものの高さで判定します。
+            const prevMinHeight = area.style.minHeight;
+            area.style.minHeight = '0';
+            while (area.scrollHeight > PAGE_HEIGHT_PX && size > 8) {
                 size -= 0.5;
                 area.style.setProperty('--print-font-size', size + 'pt');
             }
+            area.style.minHeight = prevMinHeight;
             return size < base;
         }
 

@@ -246,6 +246,7 @@
             color: #000000; /* 本文は完全にグレースケール */
             font-size: var(--print-font-size);
             position: relative;
+            flex-shrink: 0; /* 画面が狭くてもA4幅を保つ */
         }
 
         /* 編集可能であることを明示するホバーエフェクト */
@@ -288,6 +289,7 @@
             gap: 25px 20px;
             flex-grow: 1;
             justify-items: center; /* 各列の中で水平中央に配置 */
+            align-content: start;
         }
 
         .problem-item {
@@ -296,6 +298,7 @@
             align-items: center;
             justify-content: flex-start;
             page-break-inside: avoid;
+            break-inside: avoid;
             padding: 8px;
             border-radius: 4px;
             width: 100%;
@@ -373,34 +376,50 @@
         @media print {
             @page {
                 size: A4 portrait;
-                margin: 0; /* 余白をゼロにしてはみ出しを防ぎます */
+                margin: 0; /* 余白をゼロにして、ブラウザのヘッダー・フッターを出さない */
             }
 
-            body {
+            html, body {
+                width: 210mm;
+                height: auto;
                 background-color: #ffffff;
                 padding: 0;
                 margin: 0;
+                /* flexのままだと印刷で白紙や途中切れが起きやすいため、通常の配置に戻す */
+                display: block;
             }
 
-            .settings-panel, .no-print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .settings-panel, .no-print, #toast-message {
                 display: none !important;
             }
 
             .print-container {
+                display: block;
+                width: 210mm;
                 padding: 0;
+                margin: 0;
                 overflow: visible;
             }
 
             .print-page {
                 width: 210mm;
-                height: 297mm; /* A4サイズに完全固定 */
+                /* ぴったり297mmだと誤差で2ページ目が白紙になるため、少しだけ小さくする */
+                height: 296mm;
+                min-height: 0;
                 box-sizing: border-box;
                 box-shadow: none;
                 padding: 15mm 20mm;
                 margin: 0;
-                overflow: hidden; /* 2ページ目の発生を防ぎます */
+                overflow: hidden;
                 page-break-inside: avoid;
+                break-inside: avoid;
                 page-break-after: avoid;
+                break-after: avoid;
             }
 
             .editable:hover {
@@ -589,7 +608,7 @@
         <!-- 4つの操作ボタンを一列に配置、サイズ・フォントを同一に -->
         <div class="action-buttons">
             <button class="btn" onclick="generateProblems()">新しい問題</button>
-            <button class="btn" onclick="window.print()">印刷する</button>
+            <button class="btn" onclick="printPage()">印刷する</button>
             <button class="btn" onclick="saveHTML()">HTMLを保存する</button>
             <label class="btn file-input-label">
                 HTMLを読み込む
@@ -698,6 +717,47 @@
             const size = document.getElementById('font-size-pt').value;
             document.getElementById('print-area').style.setProperty('--print-font-size', size + 'pt');
         }
+
+        // ---------- 印刷まわり ----------
+        // 問題数や文字サイズが大きくて1ページに収まらないとき、
+        // 印刷の間だけ文字サイズを少しずつ小さくして、A4 1枚に収めます。
+        const PAGE_HEIGHT_PX = 296 * 96 / 25.4; // 印刷時のページ高さ(296mm)をpxに換算
+
+        function fitToPage() {
+            const area = document.getElementById('print-area');
+            const base = parseFloat(document.getElementById('font-size-pt').value) || 16;
+            let size = base;
+            area.style.setProperty('--print-font-size', size + 'pt');
+
+            // 画面表示ではmin-heightが297mmなので、中身が多いときだけscrollHeightがそれを超えます
+            while (area.scrollHeight > PAGE_HEIGHT_PX + 1 && size > 6) {
+                size -= 0.5;
+                area.style.setProperty('--print-font-size', size + 'pt');
+            }
+            return size < base;
+        }
+
+        function restoreFontSize() {
+            updateFontSize();
+        }
+
+        function printPage() {
+            // 編集中の入力欄などからフォーカスを外してから印刷します
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
+            }
+            const shrunk = fitToPage();
+            if (shrunk) {
+                showToast('1枚に収まるよう、印刷時だけ文字を小さくしました。');
+            }
+            // レイアウトの反映を待ってから印刷ダイアログを開きます
+            setTimeout(() => {
+                window.print();
+            }, 100);
+        }
+
+        window.addEventListener('beforeprint', fitToPage);
+        window.addEventListener('afterprint', restoreFontSize);
 
         function toggleHelperLines() {
             const showHelper = document.getElementById('show-helper').checked;
